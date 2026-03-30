@@ -1,0 +1,12 @@
+LICENSE
+README.md
+pyproject.toml
+octo/__init__.py
+octo/__main__.py
+octo/core.py
+octo_cli.egg-info/PKG-INFO
+octo_cli.egg-info/SOURCES.txt
+octo_cli.egg-info/dependency_links.txt
+octo_cli.egg-info/entry_points.txt
+octo_cli.egg-info/requires.txt
+octo_cli.egg-info/top_level.txt
