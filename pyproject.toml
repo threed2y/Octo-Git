@@ -1,0 +1,43 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name        = "octo-cli"
+version     = "1.0.0"
+description = "Eight arms. One terminal. All of GitHub."
+readme      = "README.md"
+license     = { text = "MIT" }
+requires-python = ">=3.10"
+
+keywords = ["github", "git", "cli", "terminal", "developer-tools"]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+
+dependencies = [
+    "requests>=2.31",
+    "rich>=13.7",
+    "InquirerPy>=0.3.4",
+]
+
+[project.scripts]
+octo = "octo.core:main"
+
+[project.urls]
+Homepage   = "https://github.com/your-username/octo"
+Issues     = "https://github.com/your-username/octo/issues"
+Changelog  = "https://github.com/your-username/octo/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["octo*"]

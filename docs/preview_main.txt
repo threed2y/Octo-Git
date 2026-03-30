@@ -1,0 +1,16 @@
+   ██████╗  ██████╗████████╗ ██████╗
+  ██╔═══██╗██╔════╝╚══██╔══╝██╔═══██╗
+  ██║   ██║██║        ██║   ██║   ██║
+  ██║   ██║██║        ██║   ██║   ██║
+  ╚██████╔╝╚██████╗   ██║   ╚██████╔╝
+   ╚═════╝  ╚═════╝   ╚═╝    ╚═════╝
+
+  eight arms. one terminal. all of github.   v1.0.0
+
+  profile: ● default
+
+❯   Browse Repositories
+    Commit & Push
+    Setup Token
+    Manage Profiles
+  ↩  Exit

@@ -1,0 +1,8 @@
+# Runtime dependencies
+requests>=2.31.0
+rich>=13.7.0
+InquirerPy>=0.3.4
+
+# Dev / testing (optional)
+pytest>=8.0
+pytest-mock>=3.12
