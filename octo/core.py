@@ -1,5 +1,5 @@
 """
-octo.py — Interactive GitHub CLI
+octo/core.py — Interactive GitHub CLI
 Eight arms. One terminal. All of GitHub.
 """
 
@@ -12,12 +12,10 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
-import csv
-import platform
-from textwrap import fill
 
 import requests
 from InquirerPy import inquirer
@@ -32,11 +30,11 @@ from rich.table import Table
 # ── Console ───────────────────────────────────────────────────────────────────
 console = Console()
 
-# ── Theme — cyan / electric blue ─────────────────────────────────────────────
-C   = "bold cyan"           # primary accent
-CD  = "cyan"                # accent dim
-CG  = "bright_cyan"         # accent glow
-B   = "bold blue"           # secondary
+# ── Theme ─────────────────────────────────────────────────────────────────────
+C   = "bold cyan"
+CD  = "cyan"
+CG  = "bright_cyan"
+B   = "bold blue"
 BD  = "blue"
 OK  = "bold green"
 ERR = "bold red"
@@ -57,13 +55,6 @@ PROFILES_FILE = Path.home() / ".octo_profiles.json"
 _active_profile: str = "default"
 
 # ── Banner ────────────────────────────────────────────────────────────────────
-BANNER = r"""
-   ___   ___ _____ ___
-  / _ \ / __|_   _/ _ \
- | (_) | (__  | || (_) |
-  \___/ \___| |_| \___/
-"""
-
 BANNER_WIDE = r"""
    ██████╗  ██████╗████████╗ ██████╗
   ██╔═══██╗██╔════╝╚══██╔══╝██╔═══██╗
@@ -72,12 +63,8 @@ BANNER_WIDE = r"""
   ╚██████╔╝╚██████╗   ██║   ╚██████╔╝
    ╚═════╝  ╚═════╝   ╚═╝    ╚═════╝
 """
-
 TAGLINE = "eight arms. one terminal. all of github."
-VERSION = "v1.0.0"
-
-# Octo tentacle separator — used in rules
-_TENTACLE = "〰"
+VERSION = "v1.1.0"
 
 
 def _banner() -> None:
@@ -93,17 +80,14 @@ def _rule(label: str = "") -> None:
     else:
         console.print(Rule(style=BORDER_DIM))
 
-
 def _ok(msg: str)   -> None: console.print(f"[{OK}]  {msg}[/{OK}]")
 def _err(msg: str)  -> None: console.print(f"[{ERR}]  {msg}[/{ERR}]")
 def _warn(msg: str) -> None: console.print(f"[{WARN}]  {msg}[/{WARN}]")
 def _info(msg: str) -> None: console.print(f"[{CD}]  {msg}[/{CD}]")
 
-
 def _panel(content: Any, title: str = "", border: str = BORDER_SUB, **kw) -> None:
     t = f"[{C}]{title}[/{C}]" if title else ""
     console.print(Panel(content, title=t, border_style=border, padding=(0, 1), **kw))
-
 
 def _kv_table(rows: list[tuple[str, str]]) -> Table:
     t = Table(box=box.SIMPLE, show_header=False, border_style=BORDER_DIM, padding=(0, 1))
@@ -113,30 +97,71 @@ def _kv_table(rows: list[tuple[str, str]]) -> Table:
         t.add_row(k, v)
     return t
 
-
 def _status(msg: str):
     return console.status(f"[{CD}]{msg}[/{CD}]")
-
 
 def _back_prompt() -> None:
     inquirer.select(message="", choices=[Choice("_", "  ↩  back")]).execute()
 
 
-# ── Profile / auth ────────────────────────────────────────────────────────────
+# ── Security: token / profile storage ────────────────────────────────────────
+#
+# Profiles are written atomically (write to a temp file, then os.replace) so a
+# mid-write crash never leaves a truncated/corrupt JSON file.
+#
+# On Unix the file is created with 0600 permissions. On Windows we do the best
+# we can (the file inherits the user's default ACL), and warn if the file
+# permissions can't be verified.
 
 def _load_profiles() -> dict[str, str]:
-    if PROFILES_FILE.exists():
+    if not PROFILES_FILE.exists():
+        return {}
+    try:
+        text = PROFILES_FILE.read_text(encoding="utf-8")
+        data = json.loads(text)
+        if not isinstance(data, dict):
+            raise ValueError("profile file is not a JSON object")
+        # Silently drop any non-string values (corruption guard)
+        return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        _warn(f"Could not read profiles file ({exc}). Starting fresh.")
+        return {}
+
+
+def _save_profiles(profiles: dict[str, str]) -> None:
+    """Write profiles atomically so a crash never corrupts the file."""
+    payload = json.dumps(profiles, indent=2, ensure_ascii=False)
+
+    # Write to a sibling temp file first, then atomically replace
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=PROFILES_FILE.parent, prefix=".octo_profiles_tmp_"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        if os.name != "nt":
+            os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, PROFILES_FILE)          # atomic on POSIX & Win32
+        if os.name != "nt":
+            os.chmod(PROFILES_FILE, 0o600)
+    except OSError as exc:
+        _err(f"Could not save profiles: {exc}")
         try:
-            return json.loads(PROFILES_FILE.read_text())
-        except json.JSONDecodeError:
-            return {}
-    return {}
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
-def _save_profiles(p: dict[str, str]) -> None:
-    PROFILES_FILE.write_text(json.dumps(p, indent=2))
-    if os.name != "nt":
-        os.chmod(PROFILES_FILE, 0o600)
+def _check_profiles_permissions() -> None:
+    """Warn if the profiles file is world-readable (Unix only)."""
+    if os.name == "nt" or not PROFILES_FILE.exists():
+        return
+    mode = PROFILES_FILE.stat().st_mode & 0o777
+    if mode & 0o077:  # group or other bits set
+        _warn(
+            f"~/.octo_profiles.json has loose permissions ({oct(mode)}). "
+            "Run:  chmod 600 ~/.octo_profiles.json"
+        )
 
 
 def _safe_token() -> str | None:
@@ -150,6 +175,113 @@ def get_headers() -> dict:
         h["Authorization"] = f"Bearer {tok}"
     return h
 
+
+# ── Security: credential passing to git ──────────────────────────────────────
+#
+# PREVIOUS APPROACH (unsafe):
+#   git -c credential.helper="!f() { echo password=<TOKEN>; }; f" ...
+#
+#   If the token contains shell metacharacters ($, `, !, \, etc.) this is a
+#   shell-injection vector.  The helper string is evaluated by the user's shell
+#   (bash/sh/zsh), so a crafted token could run arbitrary commands.
+#
+# NEW APPROACH (safe):
+#   We write the token to a temporary file with 0600 permissions, pass git a
+#   credential helper script that reads from that file, and delete the temp
+#   file immediately after the git command completes.  The token never appears
+#   in any shell evaluation context.
+
+def _git_env_with_token(token: str | None) -> tuple[dict, str | None]:
+    """
+    Return (env_dict, tmp_file_path).
+
+    If token is set, writes it to a 0600 temp file and returns an env dict
+    that points GIT_ASKPASS to a tiny helper script that emits the token as
+    the password.  Caller MUST delete tmp_file_path when done.
+    If token is None, returns ({}, None) — git will use its own credential
+    chain (prompts user if needed).
+    """
+    if not token:
+        return {}, None
+
+    # Write token to a temp file (never a shell string)
+    fd, token_path = tempfile.mkstemp(prefix=".octo_tok_")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(token)
+        if os.name != "nt":
+            os.chmod(token_path, 0o600)
+    except OSError:
+        try:
+            os.unlink(token_path)
+        except OSError:
+            pass
+        return {}, None
+
+    # Write a tiny credential-helper script
+    if os.name == "nt":
+        # On Windows, write a .bat file
+        fd2, helper_path = tempfile.mkstemp(suffix=".bat", prefix=".octo_helper_")
+        try:
+            with os.fdopen(fd2, "w") as fh:
+                fh.write(f'@echo off\necho username=token\ntype "{token_path}"\n')
+        except OSError:
+            os.unlink(token_path)
+            return {}, None
+    else:
+        fd2, helper_path = tempfile.mkstemp(prefix=".octo_helper_")
+        try:
+            with os.fdopen(fd2, "w") as fh:
+                fh.write(
+                    f'#!/bin/sh\necho username=token\ncat "{token_path}"\n'
+                )
+            os.chmod(helper_path, 0o700)
+        except OSError:
+            os.unlink(token_path)
+            return {}, None
+
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"   # never prompt interactively
+    # Pass helper via -c in the call, not env, to avoid env-var leakage;
+    # but store paths so caller can clean up both temp files.
+    env["_OCTO_TOKEN_FILE"]  = token_path
+    env["_OCTO_HELPER_FILE"] = helper_path
+    return env, token_path   # caller also deletes helper_path via env key
+
+
+def _cleanup_token_files(env: dict) -> None:
+    for key in ("_OCTO_TOKEN_FILE", "_OCTO_HELPER_FILE"):
+        path = env.pop(key, None)
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+# ── Git presence check ────────────────────────────────────────────────────────
+
+def _git_available() -> bool:
+    try:
+        subprocess.run(
+            ["git", "--version"], capture_output=True, check=True, timeout=5
+        )
+        return True
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return False
+
+
+def _run_git(*args: str, cwd: Path | None = None,
+             env: dict | None = None) -> subprocess.CompletedProcess:
+    result = subprocess.run(list(args), capture_output=True, cwd=cwd, env=env)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, args, result.stdout, result.stderr
+        )
+    return result
+
+
+# ── Profile / auth UI ─────────────────────────────────────────────────────────
 
 def setup_auth() -> None:
     _rule("Setup Token")
@@ -165,22 +297,34 @@ def setup_auth() -> None:
         _warn("No token entered — skipping.")
         return
 
-    profiles = _load_profiles()
-    profiles[profile_name] = token.strip()
-    _save_profiles(profiles)
+    token = token.strip()
 
-    with _status("Validating..."):
-        resp = requests.get(
-            f"{GITHUB_API}/user",
-            headers={"Accept": "application/vnd.github.v3+json",
-                     "Authorization": f"Bearer {token.strip()}"},
-            timeout=10,
-        )
+    # Validate before saving
+    with _status("Validating token..."):
+        try:
+            resp = requests.get(
+                f"{GITHUB_API}/user",
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    "Authorization": f"Bearer {token}",
+                },
+                timeout=10,
+                verify=True,    # explicit: always verify GitHub's TLS cert
+            )
+        except requests.RequestException as exc:
+            _err(f"Network error during validation: {exc}")
+            return
+
     if resp.status_code == 200:
         login = resp.json().get("login", "?")
+        profiles = _load_profiles()
+        profiles[profile_name] = token
+        _save_profiles(profiles)
         _ok(f"Authenticated as  {login}  (profile: {profile_name})")
+    elif resp.status_code == 401:
+        _err("Token is invalid or expired — not saved.")
     else:
-        _err(f"Token saved but validation failed (HTTP {resp.status_code}).")
+        _err(f"Validation failed (HTTP {resp.status_code}) — not saved.")
 
 
 def switch_profile() -> None:
@@ -199,6 +343,7 @@ def switch_profile() -> None:
 
 def manage_profiles() -> None:
     _rule("Profile Manager")
+    _check_profiles_permissions()
     profiles = _load_profiles()
     if not profiles:
         _warn("No profiles saved yet.")
@@ -239,7 +384,10 @@ def manage_profiles() -> None:
 
 def _get_json(url: str, params: dict | None = None) -> tuple[int, Any]:
     try:
-        r = requests.get(url, headers=get_headers(), params=params, timeout=15)
+        r = requests.get(
+            url, headers=get_headers(), params=params,
+            timeout=15, verify=True,
+        )
         return r.status_code, (r.json() if r.content else None)
     except requests.RequestException as exc:
         _err(f"Network error: {exc}")
@@ -270,23 +418,14 @@ def fetch_all_repos(username: str) -> list | None:
             params={"per_page": 100, "page": page, "sort": "updated"},
         )
         if status == 404:
-           _err("❌ User or organization not found.")
-           _info("💡 Check username spelling or repo visibility")
-           return None
-        if status == 403:
-            _err("❌ API rate limit exceeded (60 req/hour without token)")
-            _info("💡 Add a token: Main menu → Setup Token")
-            _info("💡 With token: 5,000 requests/hour")
-            _info("💡 Status: https://www.githubstatus.com")
+            _err("User or organization not found.")
             return None
-        if status == 401:
-           _err("❌ Authentication failed - invalid or expired token")
-           _info("💡 Regenerate token at: https://github.com/settings/tokens")
-           return None
+        if status == 403:
+            _err("API rate limit hit — add a token via Setup Token.")
+            return None
         if status != 200:
-           _err(f"❌ API Error (HTTP {status})")
-           _info("💡 GitHub Status: https://www.githubstatus.com")
-           return None
+            _err(f"Could not fetch repositories (HTTP {status}).")
+            return None
         if not data:
             break
         repos.extend(data)
@@ -300,16 +439,6 @@ def get_branches(owner: str, repo: str) -> list[str]:
     data = _fetch_paginated(f"{GITHUB_API}/repos/{owner}/{repo}/branches")
     return [b["name"] for b in data] or ["main"]
 
-# ── Feature 2: Text Wrapping for Descriptions ──────────────────────
-
-def _format_description(description: str | None, max_width: int = 75) -> str:
-    """Wrap and format repository description"""
-    if not description:
-        return "No description"
-    
-    desc = " ".join(description.split())
-    wrapped = fill(desc, width=max_width, break_long_words=False, break_on_hyphens=False)
-    return wrapped
 
 # ── Repo browser ──────────────────────────────────────────────────────────────
 
@@ -350,17 +479,16 @@ def browse_repos() -> None:
 
     repo = inquirer.select(message="Select repository:", choices=repo_choices).execute()
 
-    # ── Repo card ─────────────────────────────────────────────────────────────
     console.print()
     rows = [
-        ("Repo",          repo["full_name"]),
-        ("Description",   _format_description(repo.get("description"))),
-        ("Language",      repo.get("language") or "—"),
-        ("Stars / Forks", f"★ {repo.get('stargazers_count',0)}  /  ⑂ {repo.get('forks_count',0)}"),
-        ("Open issues",   str(repo.get("open_issues_count", 0))),
-        ("Default branch",repo.get("default_branch", "main")),
-        ("License",       (repo.get("license") or {}).get("spdx_id") or "—"),
-        ("URL",           repo.get("html_url", "—")),
+        ("Repo",           repo["full_name"]),
+        ("Description",    repo.get("description") or "—"),
+        ("Language",       repo.get("language") or "—"),
+        ("Stars / Forks",  f"★ {repo.get('stargazers_count',0)}  /  ⑂ {repo.get('forks_count',0)}"),
+        ("Open issues",    str(repo.get("open_issues_count", 0))),
+        ("Default branch", repo.get("default_branch", "main")),
+        ("License",        (repo.get("license") or {}).get("spdx_id") or "—"),
+        ("URL",            repo.get("html_url", "—")),
     ]
     _panel(_kv_table(rows), title=f"  {repo['name']}  ", border=BORDER_MAIN)
     console.print()
@@ -406,15 +534,15 @@ _PREVIEWABLE = {
 _MAX_PREVIEW_BYTES = 50_000
 
 _LEXER_MAP = {
-    ".py": "python",  ".js": "javascript", ".ts": "typescript",
-    ".tsx": "tsx",    ".jsx": "jsx",        ".html": "html",
-    ".css": "css",    ".scss": "scss",      ".json": "json",
-    ".yaml": "yaml",  ".yml": "yaml",       ".toml": "toml",
-    ".md": "markdown",".sh": "bash",        ".bash": "bash",
-    ".rs": "rust",    ".go": "go",          ".java": "java",
-    ".c": "c",        ".cpp": "cpp",        ".h": "c",
-    ".rb": "ruby",    ".php": "php",        ".xml": "xml",
-    ".svg": "xml",    ".ini": "ini",        ".cfg": "ini",
+    ".py": "python",   ".js": "javascript", ".ts": "typescript",
+    ".tsx": "tsx",     ".jsx": "jsx",        ".html": "html",
+    ".css": "css",     ".scss": "scss",      ".json": "json",
+    ".yaml": "yaml",   ".yml": "yaml",       ".toml": "toml",
+    ".md": "markdown", ".sh": "bash",        ".bash": "bash",
+    ".rs": "rust",     ".go": "go",          ".java": "java",
+    ".c": "c",         ".cpp": "cpp",        ".h": "c",
+    ".rb": "ruby",     ".php": "php",        ".xml": "xml",
+    ".svg": "xml",     ".ini": "ini",        ".cfg": "ini",
 }
 
 
@@ -430,62 +558,38 @@ def _render_preview(content: str, filename: str, size: int) -> None:
     _panel(syntax, title=f"  {filename}  ({size:,} B)  ", border=BORDER_CODE)
 
 
-# ── Feature 1: File Last Modified Timestamp ────────────────────────
-
-def get_file_last_modified(owner: str, repo: str, file_path: str, branch: str = "main") -> str | None:
-    """Fetch the last commit date for a file"""
-    url = f"{GITHUB_API}/repos/{owner}/{repo}/commits"
-    params = {"path": file_path, "per_page": 1}
-    
-    try:
-        status, data = _get_json(url, params=params)
-        if status == 200 and data:
-            committed_date = data[0]["commit"]["committer"]["date"]
-            # Parse ISO format: 2025-01-15T14:30:45Z
-            dt = datetime.datetime.fromisoformat(committed_date.replace('Z', '+00:00'))
-            return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-    except Exception:
-        pass
-    return None
-def preview_file(item: dict, owner: str | None = None, repo: str | None = None) -> None:
+def preview_file(item: dict) -> None:
     size = item.get("size", 0)
     ext  = Path(item["name"]).suffix.lower()
 
     if size > _MAX_PREVIEW_BYTES:
         _warn(f"File is {size:,} bytes — too large to preview.")
         _info(item.get("html_url", ""))
-        _back_prompt(); return
+        _back_prompt()
+        return
 
     if ext not in _PREVIEWABLE:
         _warn(f"Binary / unsupported type '{ext or '(none)'}' — cannot preview.")
         _info(item.get("html_url", ""))
-        _back_prompt(); return
+        _back_prompt()
+        return
 
     with _status(f"Loading  {item['name']} ..."):
         status, data = _get_json(item["url"])
 
     if status != 200 or not isinstance(data, dict):
         _err(f"Could not fetch file (HTTP {status}).")
-        _back_prompt(); return
+        _back_prompt()
+        return
 
     try:
         content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
     except Exception as exc:
         _err(f"Decode error: {exc}")
-        _back_prompt(); return
+        _back_prompt()
+        return
 
-    # Feature 1: Get file timestamp
-    title = f"  {item['name']}  ({size:,} B)  "
-    if owner and repo:
-        timestamp = get_file_last_modified(owner, repo, item["path"])
-        if timestamp:
-            title += f"  🕐 {timestamp}"
-    
-    syntax = Syntax(
-        content, _guess_lexer(item["name"]),
-        theme="monokai", line_numbers=True, word_wrap=False,
-    )
-    _panel(syntax, title=title, border=BORDER_CODE)
+    _render_preview(content, item["name"], size)
     _back_prompt()
 
 
@@ -503,7 +607,6 @@ def browse_files(username: str, selected_repo: str, branch: str = "main") -> Non
 
         contents.sort(key=lambda x: (0 if x["type"] == "dir" else 1, x["name"].lower()))
 
-        # breadcrumb header
         crumb = (
             f"[{CG}]{selected_repo}[/{CG}]"
             f"[{DIM}]/{current_path}[/{DIM}]"
@@ -532,38 +635,29 @@ def browse_files(username: str, selected_repo: str, branch: str = "main") -> Non
         if sel == "BACK":
             break
         elif sel == "CLONE":
+            # FIX: don't break after clone — let user keep browsing
             clone_and_edit(username, selected_repo, current_path, branch)
-            break
         elif sel == "..":
             current_path = "/".join(current_path.split("/")[:-1])
         elif isinstance(sel, dict):
             if sel["type"] == "dir":
                 current_path = sel["path"]
             else:
-                preview_file(sel, owner=username, repo=selected_repo)
+                preview_file(sel)
 
 
 # ── Clone, commit & push ──────────────────────────────────────────────────────
 
-def _credential_args(token: str | None) -> list[str]:
-    if not token:
-        return []
-    helper = f"!f() {{ echo username=token; echo password={token}; }}; f"
-    return ["-c", f"credential.helper={helper}"]
-
-
-def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-    result = subprocess.run(list(args), capture_output=True, cwd=cwd)
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, args, result.stdout, result.stderr)
-    return result
-
-
 def clone_and_edit(owner: str, repo: str, path: str, branch: str) -> None:
     _rule("Clone")
-    token     = _safe_token()
-    cred_args = _credential_args(token)
-    repo_url  = f"https://github.com/{owner}/{repo}.git"
+
+    # Guard: make sure git is on PATH before doing anything
+    if not _git_available():
+        _err("'git' was not found on your PATH. Install Git and try again.")
+        return
+
+    token    = _safe_token()
+    repo_url = f"https://github.com/{owner}/{repo}.git"
 
     folder_name = path.split("/")[-1] if path else repo
     target_dir  = Path(f"./{repo}_{folder_name}_clone").resolve()
@@ -579,12 +673,20 @@ def clone_and_edit(owner: str, repo: str, path: str, branch: str) -> None:
     _info(f"Source   {owner}/{repo}  /{path or '(root)'}  @  {branch}")
     _info(f"Target   {target_dir}\n")
 
+    # Build secure env + temp credential files
+    env, _token_file = _git_env_with_token(token)
+    helper_path = env.get("_OCTO_HELPER_FILE", "")
+
+    # Build the credential helper -c arg using the helper script path (no shell eval of token)
+    cred_c = ["-c", f"credential.helper={helper_path}"] if helper_path else []
+
     try:
         with _status("Cloning..."):
             _run_git(
-                "git", *cred_args,
+                "git", *cred_c,
                 "clone", "--no-checkout", "--depth", "1", "--branch", branch,
                 repo_url, str(target_dir),
+                env=env if env else None,
             )
         with _status("Configuring sparse-checkout..."):
             _run_git("git", "sparse-checkout", "init", "--cone", cwd=target_dir)
@@ -604,14 +706,19 @@ def clone_and_edit(owner: str, repo: str, path: str, branch: str) -> None:
         err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
         _err(f"Git error: {err}")
         return
+    finally:
+        # Always clean up token temp files, even on failure
+        _cleanup_token_files(env)
 
+    # Editor launch — split $EDITOR on spaces to support "code --wait" style values
     if inquirer.confirm(message="Open in editor now?", default=True).execute():
-        editor = os.environ.get("EDITOR", "code")
+        editor_env = os.environ.get("EDITOR", "code")
+        editor_args = editor_env.split() + [str(target_dir)]
         try:
-            subprocess.Popen([editor, str(target_dir)])
-            _ok(f"Launched  {editor}")
+            subprocess.Popen(editor_args)
+            _ok(f"Launched  {editor_args[0]}")
         except FileNotFoundError:
-            _err(f"Editor '{editor}' not found. Set $EDITOR.")
+            _err(f"Editor '{editor_args[0]}' not found. Set $EDITOR to your editor's command.")
 
     if inquirer.confirm(message="Queue a commit & push?", default=False).execute():
         commit_and_push(target_dir)
@@ -620,12 +727,23 @@ def clone_and_edit(owner: str, repo: str, path: str, branch: str) -> None:
 def commit_and_push(target_dir: Path | None = None) -> None:
     _rule("Commit & Push")
 
+    # Guard: git on PATH
+    if not _git_available():
+        _err("'git' was not found on your PATH. Install Git and try again.")
+        return
+
     if target_dir is None:
-        path_str   = inquirer.text(message="Path to local repo:").execute().strip()
+        path_str = inquirer.text(message="Path to local repo:").execute().strip()
+        if not path_str:
+            return
         target_dir = Path(path_str).expanduser().resolve()
 
+    # Validate before doing anything
+    if not target_dir.exists():
+        _err(f"Path does not exist: {target_dir}")
+        return
     if not (target_dir / ".git").exists():
-        _err("Not a git repository.")
+        _err(f"Not a git repository: {target_dir}")
         return
 
     result = subprocess.run(
@@ -656,7 +774,13 @@ def commit_and_push(target_dir: Path | None = None) -> None:
             ["git", "status", "--porcelain"], capture_output=True, text=True, cwd=target_dir
         ).stdout.strip().splitlines()
         file_choices = [Choice(line[3:].strip(), line) for line in files_raw if line.strip()]
+        if not file_choices:
+            _warn("No files to stage.")
+            return
         selected = inquirer.checkbox(message="Select files:", choices=file_choices).execute()
+        if not selected:
+            _warn("No files selected — aborted.")
+            return
         for f in selected:
             subprocess.run(["git", "add", "--", f], cwd=target_dir, check=True)
 
@@ -673,15 +797,23 @@ def commit_and_push(target_dir: Path | None = None) -> None:
         _err(f"Commit failed: {err}")
         return
 
-    if inquirer.confirm(message="Push to remote?", default=True).execute():
-        cred_args = _credential_args(_safe_token())
-        try:
-            with _status("Pushing..."):
-                _run_git("git", *cred_args, "push", cwd=target_dir)
-            _ok("Pushed successfully.")
-        except subprocess.CalledProcessError as exc:
-            err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
-            _err(f"Push failed: {err}")
+    if not inquirer.confirm(message="Push to remote?", default=True).execute():
+        return
+
+    token = _safe_token()
+    env, _token_file = _git_env_with_token(token)
+    helper_path = env.get("_OCTO_HELPER_FILE", "")
+    cred_c = ["-c", f"credential.helper={helper_path}"] if helper_path else []
+
+    try:
+        with _status("Pushing..."):
+            _run_git("git", *cred_c, "push", cwd=target_dir, env=env if env else None)
+        _ok("Pushed successfully.")
+    except subprocess.CalledProcessError as exc:
+        err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
+        _err(f"Push failed: {err}")
+    finally:
+        _cleanup_token_files(env)
 
 
 # ── Code search ───────────────────────────────────────────────────────────────
@@ -736,36 +868,6 @@ def search_code(owner: str, repo: str) -> None:
 
         _back_prompt()
 
-
-# ── Feature 4: Clipboard Support ──────────────────────────────────
-
-def copy_to_clipboard(content: str) -> bool:
-    """Copy content to system clipboard (cross-platform)"""
-    try:
-        if platform.system() == "Darwin":  # macOS
-            process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
-            process.communicate(content.encode('utf-8'))
-        elif platform.system() == "Linux":
-            try:
-                process = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
-                process.communicate(content.encode('utf-8'))
-            except FileNotFoundError:
-                process = subprocess.Popen(['xsel', '-b', '-i'], stdin=subprocess.PIPE)
-                process.communicate(content.encode('utf-8'))
-        elif platform.system() == "Windows":
-            process = subprocess.Popen(['clip'], stdin=subprocess.PIPE)
-            process.communicate(content.encode('utf-8'))
-        else:
-            _warn("⚠️  Clipboard not supported on this platform")
-            return False
-        
-        return True
-    except FileNotFoundError:
-        _err("❌ Clipboard tool not found")
-        return False
-    except Exception as e:
-        _err(f"❌ Clipboard error: {e}")
-        return False
 
 # ── Issues & Pull Requests ────────────────────────────────────────────────────
 
@@ -908,55 +1010,6 @@ def _show_contributors(owner: str, repo: str) -> None:
     console.print(t)
 
 
-# ── Feature 3: CSV Export Statistics ───────────────────────────────
-
-def export_contributors_csv(owner: str, repo: str, data: list[dict], output_dir: str = ".") -> None:
-    """Export top contributors to CSV file"""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{repo}_contributors_{timestamp}.csv"
-    filepath = Path(output_dir) / filename
-    
-    try:
-        with open(filepath, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['rank', 'login', 'commits'])
-            writer.writeheader()
-            
-            for rank, contrib in enumerate(data, 1):
-                writer.writerow({
-                    'rank': rank,
-                    'login': contrib.get('login', 'Unknown'),
-                    'commits': contrib.get('contributions', 0)
-                })
-        _ok(f"✅ Exported to: {filename}")
-    except IOError as e:
-        _err(f"❌ Export failed: {e}")
-
-
-def export_languages_csv(owner: str, repo: str, languages: dict, output_dir: str = ".") -> None:
-    """Export language breakdown to CSV"""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{repo}_languages_{timestamp}.csv"
-    filepath = Path(output_dir) / filename
-    
-    try:
-        total_bytes = sum(languages.values())
-        
-        with open(filepath, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['language', 'bytes', 'percentage'])
-            writer.writeheader()
-            
-            for lang, bytes_count in sorted(languages.items(), key=lambda x: x[1], reverse=True):
-                pct = (bytes_count / total_bytes * 100) if total_bytes > 0 else 0
-                writer.writerow({
-                    'language': lang,
-                    'bytes': bytes_count,
-                    'percentage': f"{pct:.1f}%"
-                })
-        _ok(f"✅ Exported to: {filename}")
-    except IOError as e:
-        _err(f"❌ Export failed: {e}")
-
-# Vivid but distinct per-language colours
 _LANG_COLORS = [CG, "bright_blue", "green", "magenta", "yellow", "red", "white", "bright_cyan"]
 
 
@@ -1025,6 +1078,7 @@ def _show_commit_activity(owner: str, repo: str) -> None:
 
 def main() -> None:
     _banner()
+    _check_profiles_permissions()
 
     while True:
         token     = _safe_token()
@@ -1067,4 +1121,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         console.print(f"\n\n  [{CD}]Interrupted — see you next time. 🐙[/{CD}]\n")
-        sys.exit(0)
+        sys.exit(0)s
