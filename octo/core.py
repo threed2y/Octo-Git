@@ -15,6 +15,9 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+import csv
+import platform
+from textwrap import fill
 
 import requests
 from InquirerPy import inquirer
@@ -267,14 +270,23 @@ def fetch_all_repos(username: str) -> list | None:
             params={"per_page": 100, "page": page, "sort": "updated"},
         )
         if status == 404:
-            _err("User or organization not found.")
-            return None
+           _err("❌ User or organization not found.")
+           _info("💡 Check username spelling or repo visibility")
+           return None
         if status == 403:
-            _err("API rate limit hit — add a token via Setup Token.")
+            _err("❌ API rate limit exceeded (60 req/hour without token)")
+            _info("💡 Add a token: Main menu → Setup Token")
+            _info("💡 With token: 5,000 requests/hour")
+            _info("💡 Status: https://www.githubstatus.com")
             return None
+        if status == 401:
+           _err("❌ Authentication failed - invalid or expired token")
+           _info("💡 Regenerate token at: https://github.com/settings/tokens")
+           return None
         if status != 200:
-            _err(f"Could not fetch repositories (HTTP {status}).")
-            return None
+           _err(f"❌ API Error (HTTP {status})")
+           _info("💡 GitHub Status: https://www.githubstatus.com")
+           return None
         if not data:
             break
         repos.extend(data)
@@ -288,6 +300,16 @@ def get_branches(owner: str, repo: str) -> list[str]:
     data = _fetch_paginated(f"{GITHUB_API}/repos/{owner}/{repo}/branches")
     return [b["name"] for b in data] or ["main"]
 
+# ── Feature 2: Text Wrapping for Descriptions ──────────────────────
+
+def _format_description(description: str | None, max_width: int = 75) -> str:
+    """Wrap and format repository description"""
+    if not description:
+        return "No description"
+    
+    desc = " ".join(description.split())
+    wrapped = fill(desc, width=max_width, break_long_words=False, break_on_hyphens=False)
+    return wrapped
 
 # ── Repo browser ──────────────────────────────────────────────────────────────
 
@@ -332,7 +354,7 @@ def browse_repos() -> None:
     console.print()
     rows = [
         ("Repo",          repo["full_name"]),
-        ("Description",   repo.get("description") or "—"),
+        ("Description",   _format_description(repo.get("description"))),
         ("Language",      repo.get("language") or "—"),
         ("Stars / Forks", f"★ {repo.get('stargazers_count',0)}  /  ⑂ {repo.get('forks_count',0)}"),
         ("Open issues",   str(repo.get("open_issues_count", 0))),
@@ -408,7 +430,24 @@ def _render_preview(content: str, filename: str, size: int) -> None:
     _panel(syntax, title=f"  {filename}  ({size:,} B)  ", border=BORDER_CODE)
 
 
-def preview_file(item: dict) -> None:
+# ── Feature 1: File Last Modified Timestamp ────────────────────────
+
+def get_file_last_modified(owner: str, repo: str, file_path: str, branch: str = "main") -> str | None:
+    """Fetch the last commit date for a file"""
+    url = f"{GITHUB_API}/repos/{owner}/{repo}/commits"
+    params = {"path": file_path, "per_page": 1}
+    
+    try:
+        status, data = _get_json(url, params=params)
+        if status == 200 and data:
+            committed_date = data[0]["commit"]["committer"]["date"]
+            # Parse ISO format: 2025-01-15T14:30:45Z
+            dt = datetime.datetime.fromisoformat(committed_date.replace('Z', '+00:00'))
+            return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        pass
+    return None
+def preview_file(item: dict, owner: str | None = None, repo: str | None = None) -> None:
     size = item.get("size", 0)
     ext  = Path(item["name"]).suffix.lower()
 
@@ -435,7 +474,18 @@ def preview_file(item: dict) -> None:
         _err(f"Decode error: {exc}")
         _back_prompt(); return
 
-    _render_preview(content, item["name"], size)
+    # Feature 1: Get file timestamp
+    title = f"  {item['name']}  ({size:,} B)  "
+    if owner and repo:
+        timestamp = get_file_last_modified(owner, repo, item["path"])
+        if timestamp:
+            title += f"  🕐 {timestamp}"
+    
+    syntax = Syntax(
+        content, _guess_lexer(item["name"]),
+        theme="monokai", line_numbers=True, word_wrap=False,
+    )
+    _panel(syntax, title=title, border=BORDER_CODE)
     _back_prompt()
 
 
@@ -490,7 +540,7 @@ def browse_files(username: str, selected_repo: str, branch: str = "main") -> Non
             if sel["type"] == "dir":
                 current_path = sel["path"]
             else:
-                preview_file(sel)
+                preview_file(sel, owner=username, repo=selected_repo)
 
 
 # ── Clone, commit & push ──────────────────────────────────────────────────────
@@ -687,6 +737,36 @@ def search_code(owner: str, repo: str) -> None:
         _back_prompt()
 
 
+# ── Feature 4: Clipboard Support ──────────────────────────────────
+
+def copy_to_clipboard(content: str) -> bool:
+    """Copy content to system clipboard (cross-platform)"""
+    try:
+        if platform.system() == "Darwin":  # macOS
+            process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+            process.communicate(content.encode('utf-8'))
+        elif platform.system() == "Linux":
+            try:
+                process = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
+                process.communicate(content.encode('utf-8'))
+            except FileNotFoundError:
+                process = subprocess.Popen(['xsel', '-b', '-i'], stdin=subprocess.PIPE)
+                process.communicate(content.encode('utf-8'))
+        elif platform.system() == "Windows":
+            process = subprocess.Popen(['clip'], stdin=subprocess.PIPE)
+            process.communicate(content.encode('utf-8'))
+        else:
+            _warn("⚠️  Clipboard not supported on this platform")
+            return False
+        
+        return True
+    except FileNotFoundError:
+        _err("❌ Clipboard tool not found")
+        return False
+    except Exception as e:
+        _err(f"❌ Clipboard error: {e}")
+        return False
+
 # ── Issues & Pull Requests ────────────────────────────────────────────────────
 
 def browse_issues_prs(owner: str, repo: str) -> None:
@@ -827,6 +907,54 @@ def _show_contributors(owner: str, repo: str) -> None:
         t.add_row(str(i), c["login"], f"{commits:,}", bar)
     console.print(t)
 
+
+# ── Feature 3: CSV Export Statistics ───────────────────────────────
+
+def export_contributors_csv(owner: str, repo: str, data: list[dict], output_dir: str = ".") -> None:
+    """Export top contributors to CSV file"""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{repo}_contributors_{timestamp}.csv"
+    filepath = Path(output_dir) / filename
+    
+    try:
+        with open(filepath, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['rank', 'login', 'commits'])
+            writer.writeheader()
+            
+            for rank, contrib in enumerate(data, 1):
+                writer.writerow({
+                    'rank': rank,
+                    'login': contrib.get('login', 'Unknown'),
+                    'commits': contrib.get('contributions', 0)
+                })
+        _ok(f"✅ Exported to: {filename}")
+    except IOError as e:
+        _err(f"❌ Export failed: {e}")
+
+
+def export_languages_csv(owner: str, repo: str, languages: dict, output_dir: str = ".") -> None:
+    """Export language breakdown to CSV"""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{repo}_languages_{timestamp}.csv"
+    filepath = Path(output_dir) / filename
+    
+    try:
+        total_bytes = sum(languages.values())
+        
+        with open(filepath, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['language', 'bytes', 'percentage'])
+            writer.writeheader()
+            
+            for lang, bytes_count in sorted(languages.items(), key=lambda x: x[1], reverse=True):
+                pct = (bytes_count / total_bytes * 100) if total_bytes > 0 else 0
+                writer.writerow({
+                    'language': lang,
+                    'bytes': bytes_count,
+                    'percentage': f"{pct:.1f}%"
+                })
+        _ok(f"✅ Exported to: {filename}")
+    except IOError as e:
+        _err(f"❌ Export failed: {e}")
 
 # Vivid but distinct per-language colours
 _LANG_COLORS = [CG, "bright_blue", "green", "magenta", "yellow", "red", "white", "bright_cyan"]
