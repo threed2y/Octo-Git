@@ -13,7 +13,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-cyan?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightcyan?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-brightcyan?style=flat-square)](CHANGELOG.md)
 
 </div>
 
@@ -48,7 +48,7 @@ Octo is a fully interactive, terminal-native GitHub companion. Browse repos, pre
   ╚██████╔╝╚██████╗   ██║   ╚██████╔╝
    ╚═════╝  ╚═════╝   ╚═╝    ╚═════╝
 
-  eight arms. one terminal. all of github.   v1.0.0
+  eight arms. one terminal. all of github.   v1.1.0
 
   profile: ● default
 
