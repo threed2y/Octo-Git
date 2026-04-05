@@ -3,6 +3,9 @@ requests>=2.31.0
 rich>=13.7.0
 InquirerPy>=0.3.4
 
+# Optional — enables clipboard support on all platforms
+# pyperclip>=1.8
+
 # Dev / testing (optional)
 pytest>=8.0
 pytest-mock>=3.12
