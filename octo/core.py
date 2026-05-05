@@ -71,7 +71,7 @@ BANNER_WIDE = r"""
    ╚═════╝  ╚═════╝   ╚═╝    ╚═════╝
 """
 TAGLINE = "eight arms. one terminal. all of github."
-VERSION = "v1.3.0"
+VERSION = "v1.4.0"
 
 
 def _banner() -> None:
@@ -733,7 +733,15 @@ def search_repos() -> None:
         ],
     ).execute()
 
-    params: dict = {"q": query, "per_page": 30}
+    lang_filter = inquirer.text(
+        message="Filter by language (e.g. python, go — blank to skip):"
+    ).execute().strip()
+
+    full_query = query
+    if lang_filter:
+        full_query = f"{query} language:{lang_filter}"
+
+    params: dict = {"q": full_query, "per_page": 30}
     if sort != "best":
         params["sort"] = sort
 
@@ -930,16 +938,18 @@ def preview_file(item: dict) -> None:
     ext      = Path(item["name"]).suffix.lower()
     html_url = item.get("html_url", "")
 
+    raw_url = item.get("download_url", "")
+
     if size > _MAX_PREVIEW_BYTES:
         _warn(f"File is {size:,} bytes — too large to preview.")
         _info(html_url)
-        _file_url_actions(html_url)
+        _file_url_actions(html_url, raw_url=raw_url, filename=item["name"])
         return
 
     if ext not in _PREVIEWABLE:
         _warn(f"Binary / unsupported type '{ext or '(none)'}' — cannot preview.")
         _info(html_url)
-        _file_url_actions(html_url)
+        _file_url_actions(html_url, raw_url=raw_url, filename=item["name"])
         return
 
     with _status(f"Loading  {item['name']} ..."):
@@ -957,21 +967,41 @@ def preview_file(item: dict) -> None:
         _back_prompt()
         return
 
+    raw_url = item.get("download_url", "")
     _render_preview(content, item["name"], size)
-    _file_url_actions(html_url)
+    _file_url_actions(html_url, raw_url=raw_url, filename=item["name"])
 
 
-def _file_url_actions(html_url: str) -> None:
-    """After a preview, offer open-in-browser / copy URL / back."""
-    action = inquirer.select(
-        message="",
-        choices=[
-            Choice("BACK",   "  ↩  back"),
-            Choice("OPEN",   "  Open in browser"),
-            Choice("COPY",   "  Copy URL"),
-        ],
-    ).execute()
-    if action == "OPEN":
+def _file_url_actions(html_url: str, raw_url: str = "", filename: str = "") -> None:
+    """After a preview, offer download / open-in-browser / copy URL / back."""
+    choices = [
+        Choice("BACK",     "  ↩  back"),
+        Choice("OPEN",     "  Open in browser"),
+        Choice("COPY",     "  Copy URL"),
+    ]
+    if raw_url and filename:
+        choices.insert(1, Choice("DOWNLOAD", "  Download file"))
+
+    action = inquirer.select(message="", choices=choices).execute()
+
+    if action == "DOWNLOAD" and raw_url and filename:
+        dest_str = inquirer.text(
+            message=f"Save as:", default=filename
+        ).execute().strip()
+        if not dest_str:
+            return
+        dest = Path(dest_str).expanduser().resolve()
+        try:
+            with _status(f"Downloading  {filename} ..."):
+                resp = requests.get(raw_url, headers=get_headers(), timeout=30, verify=True)
+            if resp.status_code == 200:
+                dest.write_bytes(resp.content)
+                _ok(f"Saved to  {dest}")
+            else:
+                _err(f"Download failed (HTTP {resp.status_code}).")
+        except Exception as exc:
+            _err(f"Download error: {exc}")
+    elif action == "OPEN":
         _open_url(html_url)
     elif action == "COPY":
         if _copy_to_clipboard(html_url):
@@ -1148,6 +1178,19 @@ def commit_and_push(target_dir: Path | None = None) -> None:
         _err(f"Not a git repository: {target_dir}")
         return
 
+    # Detect detached HEAD — push will fail silently otherwise
+    branch_res = subprocess.run(
+        ["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir
+    )
+    current_branch = branch_res.stdout.strip()
+    if not current_branch:
+        _warn(
+            "Repo is in detached HEAD state — commits cannot be pushed directly.\n"
+            "  Use Branch Manager to create a named branch first."
+        )
+        if not inquirer.confirm(message="Continue anyway (commit only, no push)?", default=False).execute():
+            return
+
     result = subprocess.run(
         ["git", "status", "--short"], capture_output=True, text=True, cwd=target_dir
     )
@@ -1198,6 +1241,10 @@ def commit_and_push(target_dir: Path | None = None) -> None:
         err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
         _err(f"Commit failed: {err}")
         return
+
+    # Offer to pull first to avoid push rejection from remote divergence
+    if inquirer.confirm(message="Pull remote changes first?", default=False).execute():
+        pull_repo(target_dir)
 
     if not inquirer.confirm(message="Push to remote?", default=True).execute():
         return
@@ -1468,17 +1515,10 @@ def create_issue(owner: str, repo: str) -> None:
         _warn("Title is required — aborted.")
         return
 
-    console.print(f"  [{DIM}]Body (optional — press Enter twice when done):[/{DIM}]")
-    body_lines: list[str] = []
-    try:
-        while True:
-            line = input()
-            if line == "" and body_lines and body_lines[-1] == "":
-                break
-            body_lines.append(line)
-    except EOFError:
-        pass
-    body = "\n".join(body_lines).strip()
+    body = inquirer.text(
+        message="Body (optional):",
+        multiline=False,
+    ).execute().strip()
 
     # Optional: labels (fetched from repo)
     labels: list[str] = []
@@ -1839,6 +1879,10 @@ def main() -> None:
                 Choice("SEARCH",   "  Search Repositories"),
                 Choice("STARRED",  "  Starred Repos"),
                 Choice("PUSH",     "  Commit & Push"),
+                Choice("PULL",     "  Pull / Sync"),
+                Choice("DIFF",     "  View Local Diff"),
+                Choice("BRANCHES", "  Branch Manager"),
+                Choice("STASH",    "  Stash Manager"),
                 Choice("HISTORY",  "  Clone History"),
                 Choice("AUTH",     "  Setup Token"),
                 Choice("PROFILES", "  Manage Profiles"),
@@ -1864,6 +1908,14 @@ def main() -> None:
             browse_starred()
         elif action == "PUSH":
             commit_and_push()
+        elif action == "PULL":
+            pull_repo()
+        elif action == "DIFF":
+            view_local_diff()
+        elif action == "BRANCHES":
+            manage_branches()
+        elif action == "STASH":
+            manage_stash()
         elif action == "HISTORY":
             clone_history_menu()
 
@@ -1874,3 +1926,427 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         console.print(f"\n\n  [{CD}]Interrupted — see you next time. 🐙[/{CD}]\n")
         sys.exit(0)
+
+
+# ── Pull / sync local clone ───────────────────────────────────────────────────
+
+def pull_repo(target_dir: Path | None = None) -> None:
+    """Pull latest changes into a local clone."""
+    _rule("Pull / Sync")
+
+    if not _git_available():
+        _err("'git' was not found on your PATH.")
+        return
+
+    if target_dir is None:
+        history = [e for e in _load_clone_history() if Path(e["path"]).exists()]
+        if history:
+            choices = [
+                Choice(Path(e["path"]), f"{Path(e['path']).name}  [{e.get('repo','')}]")
+                for e in history
+            ]
+            choices.append(Choice("__manual__", f"[{CD}]＋  Enter path manually[/{CD}]"))
+            picked = inquirer.select(message="Select repo:", choices=choices).execute()
+            if picked == "__manual__":
+                path_str = inquirer.text(message="Path to local repo:").execute().strip()
+                if not path_str:
+                    return
+                target_dir = Path(path_str).expanduser().resolve()
+            else:
+                target_dir = picked
+        else:
+            path_str = inquirer.text(message="Path to local repo:").execute().strip()
+            if not path_str:
+                return
+            target_dir = Path(path_str).expanduser().resolve()
+
+    if not target_dir.exists():
+        _err(f"Path does not exist: {target_dir}")
+        return
+    if not (target_dir / ".git").exists():
+        _err(f"Not a git repository: {target_dir}")
+        return
+
+    # Show current branch
+    branch_result = subprocess.run(
+        ["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir
+    )
+    current_branch = branch_result.stdout.strip() or "detached HEAD"
+    _info(f"Repo    {target_dir.name}")
+    _info(f"Branch  {current_branch}\n")
+
+    if current_branch == "detached HEAD":
+        _warn("Repo is in detached HEAD state — cannot pull. Switch to a branch first.")
+        return
+
+    token  = _safe_token()
+    env, _ = _git_env_with_token(token)
+    helper_path = env.get("_OCTO_HELPER_FILE", "")
+    cred_c = ["-c", f"credential.helper={helper_path}"] if helper_path else []
+
+    try:
+        with _status(f"Pulling  {current_branch} ..."):
+            result = _run_git(
+                "git", *cred_c, "pull", "--rebase=false",
+                cwd=target_dir, env=env or None,
+            )
+        stdout = result.stdout.decode(errors="replace").strip()
+        if "Already up to date" in stdout:
+            _ok("Already up to date.")
+        else:
+            _ok("Pull successful.")
+            if stdout:
+                console.print(f"[{DIM}]{stdout}[/{DIM}]")
+    except subprocess.CalledProcessError as exc:
+        err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
+        _err(f"Pull failed: {err}")
+    finally:
+        _cleanup_token_files(env)
+
+
+# ── Branch management ─────────────────────────────────────────────────────────
+
+def manage_branches(target_dir: Path | None = None) -> None:
+    """List, create, switch, and delete local branches."""
+    _rule("Branch Manager")
+
+    if not _git_available():
+        _err("'git' was not found on your PATH.")
+        return
+
+    if target_dir is None:
+        history = [e for e in _load_clone_history() if Path(e["path"]).exists()]
+        if history:
+            choices = [
+                Choice(Path(e["path"]), f"{Path(e['path']).name}  [{e.get('repo','')}]")
+                for e in history
+            ]
+            choices.append(Choice("__manual__", f"[{CD}]＋  Enter path manually[/{CD}]"))
+            picked = inquirer.select(message="Select repo:", choices=choices).execute()
+            if picked == "__manual__":
+                path_str = inquirer.text(message="Path to local repo:").execute().strip()
+                if not path_str:
+                    return
+                target_dir = Path(path_str).expanduser().resolve()
+            else:
+                target_dir = picked
+        else:
+            path_str = inquirer.text(message="Path to local repo:").execute().strip()
+            if not path_str:
+                return
+            target_dir = Path(path_str).expanduser().resolve()
+
+    if not target_dir.exists():
+        _err(f"Path does not exist: {target_dir}")
+        return
+    if not (target_dir / ".git").exists():
+        _err(f"Not a git repository: {target_dir}")
+        return
+
+    while True:
+        # Get current branch and all local branches
+        current_result = subprocess.run(
+            ["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir
+        )
+        current_branch = current_result.stdout.strip() or "detached HEAD"
+
+        branches_result = subprocess.run(
+            ["git", "branch", "--list"], capture_output=True, text=True, cwd=target_dir
+        )
+        branches = [
+            b.strip().lstrip("* ") for b in branches_result.stdout.splitlines() if b.strip()
+        ]
+
+        _info(f"Repo: {target_dir.name}  |  Current branch: [{CG}]{current_branch}[/{CG}]")
+        console.print()
+
+        action = inquirer.select(
+            message="Branch action:",
+            choices=[
+                Choice("SWITCH", "▶  Switch branch"),
+                Choice("NEW",    "＋  Create new branch"),
+                Choice("DELETE", "✕  Delete a branch"),
+                Choice("LIST",   "   List all branches (local + remote)"),
+                Choice("BACK",   "↩  Back"),
+            ],
+        ).execute()
+
+        if action == "BACK":
+            break
+
+        elif action == "SWITCH":
+            if not branches:
+                _warn("No local branches found.")
+                continue
+            choices = [
+                Choice(b, f"{'▶ ' if b == current_branch else '  '}{b}")
+                for b in branches
+            ]
+            target_branch = inquirer.select(message="Switch to:", choices=choices).execute()
+            if target_branch == current_branch:
+                _warn("Already on that branch.")
+                continue
+            try:
+                _run_git("git", "checkout", target_branch, cwd=target_dir)
+                _ok(f"Switched to  {target_branch}")
+            except subprocess.CalledProcessError as exc:
+                err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
+                _err(f"Switch failed: {err}")
+
+        elif action == "NEW":
+            new_name = inquirer.text(message="New branch name:").execute().strip()
+            if not new_name:
+                _warn("No name entered.")
+                continue
+            # Optionally base on a different branch
+            base = inquirer.text(
+                message=f"Base branch (blank = {current_branch}):"
+            ).execute().strip() or current_branch
+            try:
+                _run_git("git", "checkout", "-b", new_name, base, cwd=target_dir)
+                _ok(f"Created and switched to  {new_name}")
+            except subprocess.CalledProcessError as exc:
+                err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
+                _err(f"Create failed: {err}")
+
+        elif action == "DELETE":
+            deletable = [b for b in branches if b != current_branch]
+            if not deletable:
+                _warn("No other branches to delete.")
+                continue
+            to_del = inquirer.select(
+                message="Delete which branch?",
+                choices=[Choice(b, b) for b in deletable],
+            ).execute()
+            force = inquirer.confirm(
+                message=f"Force delete '{to_del}'? (use if branch is unmerged)", default=False
+            ).execute()
+            flag = "-D" if force else "-d"
+            try:
+                _run_git("git", "branch", flag, to_del, cwd=target_dir)
+                _ok(f"Deleted  {to_del}")
+            except subprocess.CalledProcessError as exc:
+                err = exc.stderr.decode(errors="replace").strip() if exc.stderr else str(exc)
+                _err(f"Delete failed: {err}")
+
+        elif action == "LIST":
+            result = subprocess.run(
+                ["git", "branch", "-a", "--list"],
+                capture_output=True, text=True, cwd=target_dir,
+            )
+            t = Table(box=box.SIMPLE_HEAD, border_style=BORDER_DIM, header_style=f"{C} bold")
+            t.add_column("Branch")
+            t.add_column("Type", style=DIM)
+            for line in result.stdout.splitlines():
+                name = line.strip().lstrip("* ")
+                kind = "remote" if "remotes/" in name else "local"
+                color = CG if name == current_branch else (DIM if kind == "remote" else WHT)
+                t.add_row(f"[{color}]{name}[/{color}]", kind)
+            console.print(t)
+
+
+# ── Local diff viewer ─────────────────────────────────────────────────────────
+
+def view_local_diff(target_dir: Path | None = None) -> None:
+    """Show git diff for a local repo before committing."""
+    _rule("Local Diff")
+
+    if not _git_available():
+        _err("'git' was not found on your PATH.")
+        return
+
+    if target_dir is None:
+        history = [e for e in _load_clone_history() if Path(e["path"]).exists()]
+        if history:
+            choices = [
+                Choice(Path(e["path"]), f"{Path(e['path']).name}  [{e.get('repo','')}]")
+                for e in history
+            ]
+            choices.append(Choice("__manual__", f"[{CD}]＋  Enter path manually[/{CD}]"))
+            picked = inquirer.select(message="Select repo:", choices=choices).execute()
+            if picked == "__manual__":
+                path_str = inquirer.text(message="Path to local repo:").execute().strip()
+                if not path_str:
+                    return
+                target_dir = Path(path_str).expanduser().resolve()
+            else:
+                target_dir = picked
+        else:
+            path_str = inquirer.text(message="Path to local repo:").execute().strip()
+            if not path_str:
+                return
+            target_dir = Path(path_str).expanduser().resolve()
+
+    if not target_dir.exists():
+        _err(f"Path does not exist: {target_dir}")
+        return
+    if not (target_dir / ".git").exists():
+        _err(f"Not a git repository: {target_dir}")
+        return
+
+    scope = inquirer.select(
+        message="Diff scope:",
+        choices=[
+            Choice("UNSTAGED",  "Unstaged changes  (working tree vs index)"),
+            Choice("STAGED",    "Staged changes  (index vs HEAD)"),
+            Choice("ALL",       "All changes  (working tree vs HEAD)"),
+            Choice("COMMITS",   "Between two commits / branches"),
+        ],
+    ).execute()
+
+    if scope == "UNSTAGED":
+        result = subprocess.run(
+            ["git", "diff"], capture_output=True, text=True, cwd=target_dir
+        )
+    elif scope == "STAGED":
+        result = subprocess.run(
+            ["git", "diff", "--staged"], capture_output=True, text=True, cwd=target_dir
+        )
+    elif scope == "ALL":
+        result = subprocess.run(
+            ["git", "diff", "HEAD"], capture_output=True, text=True, cwd=target_dir
+        )
+    else:  # COMMITS
+        ref_a = inquirer.text(message="From (branch / commit / HEAD~1):").execute().strip()
+        ref_b = inquirer.text(message="To   (branch / commit / HEAD):").execute().strip() or "HEAD"
+        if not ref_a:
+            _warn("No reference entered.")
+            return
+        result = subprocess.run(
+            ["git", "diff", ref_a, ref_b], capture_output=True, text=True, cwd=target_dir
+        )
+
+    diff_text = result.stdout.strip()
+    if not diff_text:
+        _ok("No changes detected.")
+        return
+
+    syntax = Syntax(diff_text, "diff", theme="monokai", line_numbers=False, word_wrap=False)
+    _panel(syntax, title="  Diff  ", border=BORDER_CODE)
+    _back_prompt()
+
+
+# ── Stash manager ─────────────────────────────────────────────────────────────
+
+def manage_stash(target_dir: Path | None = None) -> None:
+    """List, apply, pop, and drop stashes for a local repo."""
+    _rule("Stash Manager")
+
+    if not _git_available():
+        _err("'git' was not found on your PATH.")
+        return
+
+    if target_dir is None:
+        history = [e for e in _load_clone_history() if Path(e["path"]).exists()]
+        if history:
+            choices = [
+                Choice(Path(e["path"]), f"{Path(e['path']).name}  [{e.get('repo','')}]")
+                for e in history
+            ]
+            choices.append(Choice("__manual__", f"[{CD}]＋  Enter path manually[/{CD}]"))
+            picked = inquirer.select(message="Select repo:", choices=choices).execute()
+            if picked == "__manual__":
+                path_str = inquirer.text(message="Path to local repo:").execute().strip()
+                if not path_str:
+                    return
+                target_dir = Path(path_str).expanduser().resolve()
+            else:
+                target_dir = picked
+        else:
+            path_str = inquirer.text(message="Path to local repo:").execute().strip()
+            if not path_str:
+                return
+            target_dir = Path(path_str).expanduser().resolve()
+
+    if not target_dir.exists():
+        _err(f"Path does not exist: {target_dir}")
+        return
+    if not (target_dir / ".git").exists():
+        _err(f"Not a git repository: {target_dir}")
+        return
+
+    while True:
+        stash_result = subprocess.run(
+            ["git", "stash", "list"], capture_output=True, text=True, cwd=target_dir
+        )
+        stashes = [s for s in stash_result.stdout.splitlines() if s.strip()]
+
+        action = inquirer.select(
+            message="Stash action:",
+            choices=[
+                Choice("SAVE",  "＋  Stash current changes"),
+                Choice("POP",   "▶  Pop latest stash"),
+                Choice("APPLY", "   Apply a stash (keep it)"),
+                Choice("DROP",  "✕  Drop a stash"),
+                Choice("LIST",  "   List all stashes"),
+                Choice("BACK",  "↩  Back"),
+            ],
+        ).execute()
+
+        if action == "BACK":
+            break
+
+        elif action == "SAVE":
+            msg = inquirer.text(message="Stash message (optional):").execute().strip()
+            cmd = ["git", "stash", "push", "-u"]
+            if msg:
+                cmd += ["-m", msg]
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+                if r.returncode == 0:
+                    out = r.stdout.strip()
+                    _ok(out if out else "Changes stashed.")
+                else:
+                    _err(r.stderr.strip())
+            except Exception as exc:
+                _err(str(exc))
+
+        elif action == "POP":
+            if not stashes:
+                _warn("No stashes found.")
+                continue
+            try:
+                r = subprocess.run(
+                    ["git", "stash", "pop"], capture_output=True, text=True, cwd=target_dir
+                )
+                if r.returncode == 0:
+                    _ok("Stash applied and removed.")
+                else:
+                    _err(r.stderr.strip())
+            except Exception as exc:
+                _err(str(exc))
+
+        elif action in ("APPLY", "DROP"):
+            if not stashes:
+                _warn("No stashes found.")
+                continue
+            choices = [Choice(s.split(":")[0], s) for s in stashes]
+            selected = inquirer.select(
+                message="Select stash:", choices=choices
+            ).execute()
+            verb = "apply" if action == "APPLY" else "drop"
+            try:
+                r = subprocess.run(
+                    ["git", "stash", verb, selected],
+                    capture_output=True, text=True, cwd=target_dir,
+                )
+                if r.returncode == 0:
+                    _ok(f"Stash {verb}ed: {selected}")
+                else:
+                    _err(r.stderr.strip())
+            except Exception as exc:
+                _err(str(exc))
+
+        elif action == "LIST":
+            if not stashes:
+                _warn("No stashes found.")
+                continue
+            t = Table(box=box.SIMPLE_HEAD, border_style=BORDER_DIM, header_style=f"{C} bold")
+            t.add_column("Ref",     style=CD)
+            t.add_column("Message", style=WHT)
+            for s in stashes:
+                parts = s.split(":", 2)
+                ref = parts[0] if parts else s
+                msg = parts[2].strip() if len(parts) > 2 else ""
+                t.add_row(ref, msg)
+            console.print(t)
