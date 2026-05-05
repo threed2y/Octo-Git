@@ -583,7 +583,7 @@
   <a class="logo" href="#intro">
     <span class="octo-icon">🐙</span> Octo
   </a>
-  <span class="logo-badge">v1.1.0</span>
+  <span class="logo-badge">v1.4.0</span>
   <nav class="header-links">
     <a href="#installation">Install</a>
     <a href="#usage">Usage</a>
@@ -609,14 +609,35 @@
   </div>
 
   <div class="nav-group">
-    <div class="nav-group-label">Usage</div>
+    <div class="nav-group-label">Discovery</div>
     <a class="nav-link" href="#usage">Overview</a>
     <a class="nav-link" href="#browse">Browse repos</a>
+    <a class="nav-link" href="#search-repos">Search repos</a>
+    <a class="nav-link" href="#starred">Starred repos</a>
+    <a class="nav-link" href="#search">Code search</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Files & repos</div>
     <a class="nav-link" href="#files">File browser</a>
     <a class="nav-link" href="#clone">Sparse checkout</a>
+    <a class="nav-link" href="#history">Clone history</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Local workflow</div>
     <a class="nav-link" href="#commit">Commit & push</a>
-    <a class="nav-link" href="#search">Code search</a>
+    <a class="nav-link" href="#pull">Pull / sync</a>
+    <a class="nav-link" href="#diff">View local diff</a>
+    <a class="nav-link" href="#branches">Branch manager</a>
+    <a class="nav-link" href="#stash">Stash manager</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">GitHub data</div>
     <a class="nav-link" href="#issues">Issues & PRs</a>
+    <a class="nav-link" href="#actions">GitHub Actions</a>
+    <a class="nav-link" href="#create-issue">Create issue</a>
     <a class="nav-link" href="#stats">Repo stats</a>
   </div>
 
@@ -624,6 +645,7 @@
     <div class="nav-group-label">Reference</div>
     <a class="nav-link" href="#profiles">Profiles</a>
     <a class="nav-link" href="#security">Security <span class="badge">v1.1</span></a>
+    <a class="nav-link" href="#changelog">Changelog <span class="badge">v1.4</span></a>
     <a class="nav-link" href="#platform">Platform support</a>
     <a class="nav-link" href="#dependencies">Dependencies</a>
     <a class="nav-link" href="#structure">Project structure</a>
@@ -631,7 +653,6 @@
 
   <div class="nav-group">
     <div class="nav-group-label">Project</div>
-    <a class="nav-link" href="#changelog">Changelog</a>
     <a class="nav-link" href="#roadmap">Roadmap</a>
     <a class="nav-link" href="#contributing">Contributing</a>
   </div>
@@ -715,6 +736,41 @@
         <div class="feature-icon">👤</div>
         <div class="feature-title">Multi-account</div>
         <div class="feature-desc">Named token profiles — default, work, personal. Switch instantly from the main menu.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⭐</div>
+        <div class="feature-title">Starred repos</div>
+        <div class="feature-desc">Browse your starred repositories with live filter. Same action loop as Browse — no context switching.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔎</div>
+        <div class="feature-title">Repo search</div>
+        <div class="feature-desc">Search GitHub globally by keyword and language. Sort by stars, forks, or recency.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">GitHub Actions</div>
+        <div class="feature-desc">View workflow runs, job status, and step-level failure details. No browser needed.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌿</div>
+        <div class="feature-title">Branch manager</div>
+        <div class="feature-desc">List, switch, create, and delete local branches. Detached HEAD detection built in.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📥</div>
+        <div class="feature-title">Pull / sync</div>
+        <div class="feature-desc">Pull latest remote changes into any local clone from the main menu. History-aware.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗂️</div>
+        <div class="feature-title">Stash manager</div>
+        <div class="feature-desc">Stash, pop, apply, drop, and list stashes — full stash workflow in one menu.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔀</div>
+        <div class="feature-title">PR diff viewer</div>
+        <div class="feature-desc">View changed files and read inline patches for any pull request with Monokai highlighting.</div>
       </div>
     </div>
   </section>
@@ -811,10 +867,10 @@ octo</code></pre>
     <h2><span class="h2-accent">📂</span> Browse repositories</h2>
     <div class="steps">
       <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Select Browse Repositories</div>From the main menu.</div></div>
-      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Enter a username or org</div>e.g. <code>django</code>, <code>microsoft</code>, <code>torvalds</code>. Octo fetches all repositories with full pagination — no 100-repo cap.</div></div>
-      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Filter (optional)</div>Type a keyword to filter by name or description. Press Enter with a blank input to show all.</div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Enter a username or org</div>e.g. <code>django</code>, <code>microsoft</code>, <code>torvalds</code>. Recent usernames are offered as a quick-pick list — no retyping. Fetches all repos with full pagination — no 100-repo cap.</div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Filter (optional)</div>Type a keyword to filter by name, description, or repository topics. Press Enter with a blank input to show all.</div></div>
       <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Select a repository</div>A summary card appears showing stars, forks, language, license, and open issue count.</div></div>
-      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Choose an action</div><strong>Browse Files</strong>, <strong>Search Code</strong>, <strong>Issues & PRs</strong>, or <strong>Stats & Insights</strong>.</div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Choose an action</div><strong>Browse Files</strong>, <strong>Search Code</strong>, <strong>Issues & PRs</strong>, <strong>GitHub Actions</strong>, <strong>Stats & Insights</strong>, <strong>Create Issue</strong>, <strong>Open in Browser</strong>, or <strong>Copy URL</strong>.</div></div>
     </div>
   </section>
 
@@ -832,6 +888,7 @@ octo</code></pre>
       <code>.xml</code> <code>.svg</code> <code>.ini</code> <code>.conf</code> and more.
     </p>
     <p>Binary files and unsupported extensions display the file's GitHub URL instead of attempting a preview.</p>
+    <p>After any preview, the action menu offers <strong>Open in Browser</strong>, <strong>Copy URL</strong>, and <strong>Download file</strong> — saving the raw file directly to disk at a path you choose.</p>
   </section>
 
   <!-- CLONE -->
@@ -844,8 +901,8 @@ octo</code></pre>
     <p>The clone is saved as <code>./<em>repo</em>_<em>folder</em>_clone/</code> in your current working directory. Octo asks if you want to open it in <code>$EDITOR</code> immediately, then offers to start a commit & push session.</p>
 
     <div class="callout">
-      <div class="callout-title">New in v1.1.0</div>
-      After cloning, the file browser now continues running so you can navigate to another folder and clone again without restarting.
+      <div class="callout-title">Clone history</div>
+      Every clone is automatically recorded in <code>~/.octo_clones.json</code>. Access them from <strong>Clone History</strong> in the main menu to commit, push, or reopen without navigating the file browser again.
     </div>
 
     <h3>How sparse checkout works</h3>
@@ -861,11 +918,11 @@ git checkout <span class="var">BRANCH</span></code></pre>
     <h2><span class="h2-accent">⬆️</span> Commit & push</h2>
     <p>Available from the main menu, or automatically offered after a sparse checkout.</p>
     <div class="steps">
-      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Select Commit & Push</div>Or enter the path to any local git repository.</div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Select Commit & Push</div>Opens with a quick-pick list of your known local clones. Choose one or enter a path manually.</div></div>
       <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">View changed files</div>Octo runs <code>git status</code> and displays all modified, added, and deleted files.</div></div>
       <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Stage</div>Choose to stage everything (<code>git add -A</code>) or pick files individually from a checkbox list.</div></div>
       <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Commit message</div>Enter a commit message. An empty message aborts without running any git command.</div></div>
-      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Push</div>Confirm to push to the remote. Octo handles authentication securely — the token never appears in process arguments.</div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><div class="step-title">Push</div>Optionally pull remote changes first to prevent rejection. Octo handles authentication securely — the token never appears in process arguments. Detached HEAD is detected early with a clear explanation.</div></div>
     </div>
   </section>
 
@@ -897,7 +954,8 @@ git checkout <span class="var">BRANCH</span></code></pre>
     <h2><span class="h2-accent">🐛</span> Issues & Pull Requests</h2>
     <pre><code>Browse  →  select repo  →  Issues & Pull Requests</code></pre>
     <p>Choose between Issues and Pull Requests. Filter by state (open / closed / all) and optionally by label. Select any item to read its full body and optionally load up to 10 comment threads inline.</p>
-    <p>Each detail view shows: number, title, state, author, creation date, last updated, labels, assignees, and a direct URL.</p>
+    <p>Each detail view shows: number, title, state, author, creation date, last updated, labels, assignees, and a direct URL. Pull Requests also offer a <strong>View changed files / diff</strong> prompt — showing a file summary table and inline patch view with Monokai highlighting.</p>
+    <p>Every issue and PR has <strong>Open in Browser</strong> and <strong>Copy URL</strong> at the bottom of its detail view.</p>
   </section>
 
   <!-- STATS -->
@@ -916,6 +974,127 @@ git checkout <span class="var">BRANCH</span></code></pre>
     <div class="callout">
       <div class="callout-title">Note</div>
       GitHub computes commit activity statistics asynchronously. If the data isn't ready, Octo retries once after 3 seconds and tells you to try again if it's still computing.
+    </div>
+  </section>
+
+  <!-- SEARCH REPOS -->
+  <section class="doc-section" id="search-repos">
+    <h2><span class="h2-accent">🔎</span> Search repositories</h2>
+    <pre><code>Main menu  →  Search Repositories</code></pre>
+    <p>Search GitHub globally for repositories by keyword. Results are sorted by your choice of stars, recently updated, forks, or best match. An optional language filter appends <code>language:&lt;lang&gt;</code> to the query.</p>
+    <p>Selecting a result drops you into the same repo action loop as Browse — Browse Files, Search Code, Issues & PRs, Actions, Stats, and more.</p>
+  </section>
+
+  <!-- STARRED -->
+  <section class="doc-section" id="starred">
+    <h2><span class="h2-accent">⭐</span> Starred repos</h2>
+    <pre><code>Main menu  →  Starred Repos</code></pre>
+    <p>Fetches up to 500 of your starred repositories (requires a token). Supports the same live keyword filter as Browse — matches name, description, full name, and topics. All repo actions available after selection.</p>
+  </section>
+
+  <!-- CLONE HISTORY -->
+  <section class="doc-section" id="history">
+    <h2><span class="h2-accent">🕓</span> Clone history</h2>
+    <pre><code>Main menu  →  Clone History</code></pre>
+    <p>Every successful sparse checkout is recorded in <code>~/.octo_clones.json</code> (up to 20 entries, deduplicated by path). Entries whose directories no longer exist are pruned automatically.</p>
+    <p>From the Clone History menu you can:</p>
+    <table>
+      <thead><tr><th>Action</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Commit & Push</strong></td><td>Stage, commit, and push without leaving Octo</td></tr>
+        <tr><td><strong>Open in Editor</strong></td><td>Launch <code>$EDITOR</code> pointed at the directory</td></tr>
+        <tr><td><strong>Open in Browser</strong></td><td>Open the source GitHub repo URL in your browser</td></tr>
+        <tr><td><strong>Copy path</strong></td><td>Copy the local directory path to clipboard</td></tr>
+        <tr><td><strong>Remove entry</strong></td><td>Remove from history without deleting the directory</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- PULL -->
+  <section class="doc-section" id="pull">
+    <h2><span class="h2-accent">⬇️</span> Pull / sync</h2>
+    <pre><code>Main menu  →  Pull / Sync</code></pre>
+    <p>Pull latest remote changes into any local clone. Picks from your clone history or accepts a manual path. Shows the current branch before pulling.</p>
+    <div class="callout warn">
+      <div class="callout-title">Detached HEAD</div>
+      Sparse checkouts can leave the repo in detached HEAD state. Octo detects this and refuses to pull with a clear explanation — use the Branch Manager to switch to a named branch first.
+    </div>
+  </section>
+
+  <!-- DIFF -->
+  <section class="doc-section" id="diff">
+    <h2><span class="h2-accent">±</span> View local diff</h2>
+    <pre><code>Main menu  →  View Local Diff</code></pre>
+    <p>Renders <code>git diff</code> output inline with Monokai syntax highlighting before you commit. Four modes:</p>
+    <table>
+      <thead><tr><th>Mode</th><th>Equivalent command</th></tr></thead>
+      <tbody>
+        <tr><td>Unstaged changes</td><td><code>git diff</code></td></tr>
+        <tr><td>Staged changes</td><td><code>git diff --staged</code></td></tr>
+        <tr><td>All changes vs HEAD</td><td><code>git diff HEAD</code></td></tr>
+        <tr><td>Between commits / branches</td><td><code>git diff &lt;ref-a&gt; &lt;ref-b&gt;</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- BRANCHES -->
+  <section class="doc-section" id="branches">
+    <h2><span class="h2-accent">🌿</span> Branch manager</h2>
+    <pre><code>Main menu  →  Branch Manager</code></pre>
+    <p>Manage local branches for any clone in your history. The current branch is shown at the top of every action.</p>
+    <table>
+      <thead><tr><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Switch branch</strong></td><td>Checkout any local branch</td></tr>
+        <tr><td><strong>Create branch</strong></td><td>Name and base branch — creates and checks out immediately</td></tr>
+        <tr><td><strong>Delete branch</strong></td><td>Safe delete (<code>-d</code>) or force delete (<code>-D</code>) with confirmation</td></tr>
+        <tr><td><strong>List all branches</strong></td><td>Local and remote, with current branch highlighted</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- STASH -->
+  <section class="doc-section" id="stash">
+    <h2><span class="h2-accent">🗂️</span> Stash manager</h2>
+    <pre><code>Main menu  →  Stash Manager</code></pre>
+    <p>Full stash workflow without leaving Octo.</p>
+    <table>
+      <thead><tr><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Stash</strong></td><td>Stash current changes with an optional message. Includes untracked files (<code>-u</code>).</td></tr>
+        <tr><td><strong>Pop</strong></td><td>Apply and remove the latest stash</td></tr>
+        <tr><td><strong>Apply</strong></td><td>Apply a selected stash without removing it</td></tr>
+        <tr><td><strong>Drop</strong></td><td>Delete a selected stash</td></tr>
+        <tr><td><strong>List</strong></td><td>Show all stashes in a table with their messages</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ACTIONS -->
+  <section class="doc-section" id="actions">
+    <h2><span class="h2-accent">⚡</span> GitHub Actions</h2>
+    <pre><code>Browse  →  select repo  →  GitHub Actions</code></pre>
+    <p>Shows the last 30 workflow runs for a repository. Each run displays a status icon, branch, trigger event, and duration.</p>
+    <table>
+      <thead><tr><th>Icon</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code class="ok">✓</code></td><td>Success</td></tr>
+        <tr><td><code class="err">✗</code></td><td>Failure or timed out</td></tr>
+        <tr><td><code class="warn-c">⟳</code></td><td>In progress</td></tr>
+        <tr><td><code>⊘</code></td><td>Cancelled</td></tr>
+      </tbody>
+    </table>
+    <p>Selecting a run shows all jobs in a table. Failed jobs expand to show which individual step failed, so you can identify the problem without opening the browser.</p>
+  </section>
+
+  <!-- CREATE ISSUE -->
+  <section class="doc-section" id="create-issue">
+    <h2><span class="h2-accent">✏️</span> Create an issue</h2>
+    <pre><code>Browse  →  select repo  →  Create an Issue</code></pre>
+    <p>Opens a short form: title (required), optional body, and optional labels fetched from the repository. A preview panel shows the issue before you submit. On success, the new issue URL is displayed and you can open it in the browser immediately.</p>
+    <div class="callout">
+      <div class="callout-title">Requires a token</div>
+      Creating issues requires a GitHub token with the <code>repo</code> scope. Add one via <strong>Setup Token</strong> in the main menu.
     </div>
   </section>
 
@@ -1029,9 +1208,10 @@ os.unlink(helper)</code></pre>
         <tr><td><a href="https://github.com/psf/requests" target="_blank">requests</a></td><td>≥ 2.31</td><td>GitHub API HTTP calls</td></tr>
         <tr><td><a href="https://github.com/Textualize/rich" target="_blank">rich</a></td><td>≥ 13.7</td><td>Terminal UI — panels, tables, syntax highlighting</td></tr>
         <tr><td><a href="https://github.com/kazhala/InquirerPy" target="_blank">InquirerPy</a></td><td>≥ 0.3.4</td><td>Interactive menus and prompts</td></tr>
+        <tr><td><a href="https://github.com/asweigart/pyperclip" target="_blank">pyperclip</a></td><td>≥ 1.8 <em>(optional)</em></td><td>Cross-platform clipboard support. Falls back to <code>pbcopy</code> / <code>xclip</code> / <code>clip</code> if not installed.</td></tr>
       </tbody>
     </table>
-    <p>All three are pure-Python and install without any system-level dependencies.</p>
+    <p>The first three are required. <code>pyperclip</code> is optional — uncomment it in <code>requirements.txt</code> to install.</p>
   </section>
 
   <!-- STRUCTURE -->
@@ -1060,6 +1240,54 @@ os.unlink(helper)</code></pre>
   <!-- CHANGELOG -->
   <section class="doc-section" id="changelog">
     <h2><span class="h2-accent">◈</span> Changelog</h2>
+
+    <div class="changelog-entry">
+      <div class="changelog-version">v1.4.0</div>
+      <div class="changelog-date">May 5, 2026</div>
+      <div>
+        <span class="changelog-tag ct-added">Added</span>
+        <span class="changelog-tag ct-fixed">Fixed</span>
+      </div>
+      <ul class="changelog-list">
+        <li>Pull / Sync — pull latest remote changes from the main menu, with detached HEAD detection</li>
+        <li>Branch Manager — list, switch, create, and delete local branches</li>
+        <li>View Local Diff — git diff rendered inline with Monokai highlighting, four scope modes</li>
+        <li>Stash Manager — stash, pop, apply, drop, and list stashes interactively</li>
+        <li>File download — download any previewed file to disk via GitHub raw URL</li>
+        <li>Language filter in global repo search — appends <code>language:&lt;lang&gt;</code> to query</li>
+        <li>Fixed: detached HEAD warning in commit &amp; push flow</li>
+        <li>Fixed: pull-before-push prompt prevents remote divergence errors</li>
+        <li>Fixed: issue body input replaced with <code>inquirer.text()</code> — consistent with all other inputs</li>
+      </ul>
+    </div>
+
+    <div class="changelog-entry">
+      <div class="changelog-version">v1.3.0</div>
+      <div class="changelog-date">April 5, 2026</div>
+      <div>
+        <span class="changelog-tag ct-added">Added</span>
+        <span class="changelog-tag ct-fixed">Fixed</span>
+      </div>
+      <ul class="changelog-list">
+        <li>Clone History — tracks up to 20 clones in <code>~/.octo_clones.json</code> with commit, open, copy, and remove actions</li>
+        <li>Repository Search — global GitHub search with sort and language filter</li>
+        <li>Starred Repositories — browse up to 500 starred repos with live filter</li>
+        <li>Recent Usernames — last 10 usernames as quick-pick in Browse flow</li>
+        <li>GitHub Actions viewer — runs, jobs, step-level failure details</li>
+        <li>PR Diff viewer — file summary table and inline patch with Monokai highlighting</li>
+        <li>Create Issue — title, body, labels, preview before submit</li>
+        <li>Open in Browser and Copy URL — available across all repo, file, and issue views</li>
+        <li>Shared <code>_repo_action_loop()</code> — all entry points (Browse, Search, Starred) behave identically</li>
+        <li>Topic filtering in Browse — filter matches repository topics field</li>
+        <li>Fixed: private repos now visible when browsing your own username</li>
+        <li>Fixed: non-JSON GitHub error responses no longer crash <code>_get_json</code></li>
+        <li>Fixed: file browser shows correct error when path points to a file not a directory</li>
+        <li>Fixed: <code>datetime.utcfromtimestamp</code> deprecated in Python 3.12 — replaced</li>
+        <li>Fixed: rate limit tracking via <code>X-RateLimit-Remaining</code> header on every response</li>
+        <li>Fixed: repo action menu now loops — no longer ejects to username prompt after an action</li>
+        <li>Fixed: profile manager reachable even when no profiles are saved</li>
+      </ul>
+    </div>
 
     <div class="changelog-entry">
       <div class="changelog-version">v1.1.0</div>
@@ -1108,7 +1336,7 @@ os.unlink(helper)</code></pre>
     <p>Planned and considered features for future releases.</p>
 
     <div class="roadmap-item">
-      <span class="rm-tag rm-next">v1.2</span>
+      <span class="rm-tag rm-next">v1.5</span>
       <div class="rm-body">
         <div class="rm-title">Fuzzy finder</div>
         <div class="rm-desc">Replace flat selection lists with an incremental fuzzy filter for repo selection and file browsing — faster for large orgs and deep directory trees.</div>
@@ -1116,34 +1344,34 @@ os.unlink(helper)</code></pre>
     </div>
 
     <div class="roadmap-item">
-      <span class="rm-tag rm-next">v1.2</span>
+      <span class="rm-tag rm-next">v1.5</span>
       <div class="rm-body">
         <div class="rm-title">Config file (<code>~/.octorc</code>)</div>
-        <div class="rm-desc">User-configurable defaults: preferred editor, default clone directory, preview theme, max preview size, and whether to always open editor after clone.</div>
+        <div class="rm-desc">User-configurable defaults: preferred editor, default clone directory, preview theme, max preview file size, and whether to always open editor after clone.</div>
       </div>
     </div>
 
     <div class="roadmap-item">
-      <span class="rm-tag rm-planned">v1.3</span>
+      <span class="rm-tag rm-next">v1.5</span>
       <div class="rm-body">
-        <div class="rm-title">GitHub Actions viewer</div>
-        <div class="rm-desc">Browse workflow runs, see per-job pass/fail status, and stream live logs from in-progress runs via the GitHub streaming log API.</div>
+        <div class="rm-title">Ahead / behind counts</div>
+        <div class="rm-desc">Show how many commits each local branch is ahead or behind its remote tracking branch — visible in the Branch Manager list view.</div>
       </div>
     </div>
 
     <div class="roadmap-item">
-      <span class="rm-tag rm-planned">v1.3</span>
+      <span class="rm-tag rm-planned">v1.6</span>
       <div class="rm-body">
-        <div class="rm-title">PR diff & review</div>
-        <div class="rm-desc">View file diffs inline for a pull request and leave review comments, approvals, or change requests — without opening a browser.</div>
+        <div class="rm-title">PR review submission</div>
+        <div class="rm-desc">Leave review comments, approve, or request changes on pull requests — extending the existing diff viewer into a full review workflow.</div>
       </div>
     </div>
 
     <div class="roadmap-item">
-      <span class="rm-tag rm-planned">v1.4</span>
+      <span class="rm-tag rm-planned">v1.6</span>
       <div class="rm-body">
-        <div class="rm-title">Local repo dashboard</div>
-        <div class="rm-desc">Point Octo at a local git repo and see branch list with ahead/behind counts, recent commit log, stash list, and a visual commit graph.</div>
+        <div class="rm-title">Actions log streaming</div>
+        <div class="rm-desc">Stream live logs from in-progress workflow runs via the GitHub log API — currently only completed runs are shown.</div>
       </div>
     </div>
 
@@ -1208,7 +1436,7 @@ python -m octo</code></pre>
 </div>
 
 <footer>
-  <span>© 2025 Octo contributors — MIT License</span>
+  <span>© 2026 Octo contributors — MIT License</span>
   <span>
     <a href="https://github.com/threed2y/Octo-Git" target="_blank">GitHub</a> ·
     <a href="https://github.com/threed2y/Octo-Git/releases" target="_blank">Releases</a> ·
